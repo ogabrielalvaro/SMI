@@ -1,0 +1,3 @@
+-- Roles, GRANT e REVOKE (admin_industrial, operador, gestor, somente_leitura)
+-- Parte 3
+-- Ordem de execução: arquivos sql/0*.sql em sequência

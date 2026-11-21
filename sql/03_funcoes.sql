@@ -1,0 +1,3 @@
+-- Funções e procedures (média/consumo, checagem de limites, registro de manutenção)
+-- Parte 2
+-- Ordem de execução: arquivos sql/0*.sql em sequência

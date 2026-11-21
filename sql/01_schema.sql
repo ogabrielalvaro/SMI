@@ -1,0 +1,3 @@
+-- Criação das tabelas, restrições, índices e sequences
+-- Parte 1
+-- Ordem de execução: arquivos sql/0*.sql em sequência
