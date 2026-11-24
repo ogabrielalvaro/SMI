@@ -1,216 +1,171 @@
--- =====================================================================
--- SMI - Sistema de Monitoramento e Gestão de Dados Industriais
--- 01_schema.sql  (Parte 1: modelagem física)
+-- SMI - Sistema de Monitoramento e Gestao de Dados Industriais
+-- 01_schema.sql (parte 1)
 --
--- Antes de rodar, criar o banco (fora deste script):
---     createdb industrial
---     psql -d industrial -v ON_ERROR_STOP=1 -f sql/01_schema.sql
+-- criar o banco antes (fora do script):
+--   createdb industrial
+--   psql -d industrial -v ON_ERROR_STOP=1 -f sql/01_schema.sql
 --
--- O script pode ser rodado de novo: ele apaga as tabelas antes de criar.
--- Tudo fica no schema public pra não complicar os GRANTs da Parte 3.
--- =====================================================================
+-- pode rodar de novo, ele apaga tudo antes de criar.
+-- o modelo segue o DER do professor.
 
--- ---------------------------------------------------------------------
--- Limpeza (ordem inversa das dependências)
--- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS manutencao_tecnico CASCADE;
-DROP TABLE IF EXISTS manutencao         CASCADE;
-DROP TABLE IF EXISTS alerta             CASCADE;
-DROP TABLE IF EXISTS leitura            CASCADE;
-DROP TABLE IF EXISTS sensor             CASCADE;
-DROP TABLE IF EXISTS equipamento        CASCADE;
-DROP TABLE IF EXISTS linha_producao     CASCADE;
-DROP TABLE IF EXISTS planta             CASCADE;
-DROP TABLE IF EXISTS tecnico            CASCADE;
-DROP TABLE IF EXISTS tipo_manutencao    CASCADE;
-DROP TABLE IF EXISTS unidade_medida     CASCADE;
-DROP TABLE IF EXISTS tipo_sensor        CASCADE;
+drop table if exists alerta cascade;
+drop table if exists leitura cascade;
+drop table if exists manutencao cascade;
+drop table if exists sensor cascade;
+drop table if exists equipamento cascade;
+drop table if exists linha_producao cascade;
+drop table if exists planta cascade;
+drop table if exists tecnico cascade;
+drop table if exists tipo_manutencao cascade;
+drop table if exists unidade_medida cascade;
+drop table if exists tipo_sensor cascade;
 
-DROP SEQUENCE IF EXISTS seq_planta, seq_linha, seq_equipamento, seq_tipo_sensor,
-                        seq_unidade, seq_sensor, seq_leitura, seq_alerta,
-                        seq_tecnico, seq_tipo_manutencao, seq_manutencao;
+drop sequence if exists seq_planta, seq_linha, seq_equipamento, seq_tipo_sensor,
+    seq_unidade, seq_sensor, seq_leitura, seq_alerta, seq_tecnico,
+    seq_tipo_manutencao, seq_manutencao;
 
--- ---------------------------------------------------------------------
--- Sequences
--- Criadas à mão (em vez de SERIAL) pra ficarem visíveis no script.
--- Cada uma é "dona" da coluna que usa (OWNED BY, mais abaixo), então
--- se a tabela for apagada a sequence vai junto.
--- ---------------------------------------------------------------------
-CREATE SEQUENCE seq_planta          START 1;
-CREATE SEQUENCE seq_linha           START 1;
-CREATE SEQUENCE seq_equipamento     START 1;
-CREATE SEQUENCE seq_tipo_sensor     START 1;
-CREATE SEQUENCE seq_unidade         START 1;
-CREATE SEQUENCE seq_sensor          START 1;
-CREATE SEQUENCE seq_leitura         START 1;
-CREATE SEQUENCE seq_alerta          START 1;
-CREATE SEQUENCE seq_tecnico         START 1;
-CREATE SEQUENCE seq_tipo_manutencao START 1;
-CREATE SEQUENCE seq_manutencao      START 1;
+-- sequences (uma pra cada chave primaria)
+create sequence seq_planta start 1;
+create sequence seq_linha start 1;
+create sequence seq_equipamento start 1;
+create sequence seq_tipo_sensor start 1;
+create sequence seq_unidade start 1;
+create sequence seq_sensor start 1;
+create sequence seq_leitura start 1;
+create sequence seq_alerta start 1;
+create sequence seq_tecnico start 1;
+create sequence seq_tipo_manutencao start 1;
+create sequence seq_manutencao start 1;
 
--- ---------------------------------------------------------------------
--- Tabelas de apoio (não dependem de ninguém)
--- ---------------------------------------------------------------------
-CREATE TABLE planta (
-    id_planta    integer      PRIMARY KEY DEFAULT nextval('seq_planta'),
-    nome         varchar(80)  NOT NULL UNIQUE,
-    localizacao  varchar(120) NOT NULL,
-    responsavel  varchar(80)  NOT NULL
+-- tabelas que nao dependem de nenhuma outra
+
+create table planta (
+    id_planta integer primary key default nextval('seq_planta'),
+    nome varchar(80) not null unique,
+    localizacao varchar(120) not null,
+    responsavel varchar(80) not null
 );
 
-CREATE TABLE tipo_sensor (
-    id_tipo_sensor integer     PRIMARY KEY DEFAULT nextval('seq_tipo_sensor'),
-    nome           varchar(50) NOT NULL UNIQUE,
-    descricao      text
+create table tipo_sensor (
+    id_tipo_sensor integer primary key default nextval('seq_tipo_sensor'),
+    nome varchar(50) not null unique,
+    descricao text
 );
 
-CREATE TABLE unidade_medida (
-    id_unidade integer     PRIMARY KEY DEFAULT nextval('seq_unidade'),
-    sigla      varchar(15) NOT NULL UNIQUE,
-    descricao  varchar(80) NOT NULL
+create table unidade_medida (
+    id_unidade integer primary key default nextval('seq_unidade'),
+    sigla varchar(15) not null unique,
+    descricao varchar(80) not null
 );
 
-CREATE TABLE tecnico (
-    id_tecnico    integer      PRIMARY KEY DEFAULT nextval('seq_tecnico'),
-    nome          varchar(80)  NOT NULL,
-    especialidade varchar(60)  NOT NULL,
-    contato       varchar(120)
+create table tecnico (
+    id_tecnico integer primary key default nextval('seq_tecnico'),
+    nome varchar(80) not null,
+    especialidade varchar(60) not null,
+    contato varchar(120)
 );
 
-CREATE TABLE tipo_manutencao (
-    id_tipo_manutencao integer     PRIMARY KEY DEFAULT nextval('seq_tipo_manutencao'),
-    nome               varchar(50) NOT NULL UNIQUE,
-    descricao          text
+create table tipo_manutencao (
+    id_tipo_manutencao integer primary key default nextval('seq_tipo_manutencao'),
+    nome varchar(50) not null unique,
+    descricao text
 );
 
--- ---------------------------------------------------------------------
--- Estrutura da fábrica: planta -> linha -> equipamento
--- ---------------------------------------------------------------------
-CREATE TABLE linha_producao (
-    id_linha   integer      PRIMARY KEY DEFAULT nextval('seq_linha'),
-    nome       varchar(80)  NOT NULL,
-    descricao  text,
-    id_planta  integer      NOT NULL REFERENCES planta (id_planta),
-    -- duas plantas podem ter uma "Linha 1", mas a mesma planta não
-    CONSTRAINT uq_linha_planta_nome UNIQUE (id_planta, nome)
+-- planta -> linha -> equipamento
+
+create table linha_producao (
+    id_linha integer primary key default nextval('seq_linha'),
+    nome varchar(80) not null,
+    descricao text,
+    id_planta integer not null references planta (id_planta),
+    -- na mesma planta nao pode ter duas linhas com o mesmo nome
+    constraint uq_linha_planta_nome unique (id_planta, nome)
 );
 
-CREATE TABLE equipamento (
-    id_equipamento  integer      PRIMARY KEY DEFAULT nextval('seq_equipamento'),
-    tag             varchar(30)  NOT NULL UNIQUE,   -- código usado no chão de fábrica
-    nome            varchar(80)  NOT NULL,
-    fabricante      varchar(60),
-    modelo          varchar(60),
-    data_instalacao date         NOT NULL,
-    status          varchar(15)  NOT NULL DEFAULT 'operando',
-    id_linha        integer      NOT NULL REFERENCES linha_producao (id_linha),
-    CONSTRAINT ck_equipamento_status
-        CHECK (status IN ('operando', 'parado', 'manutencao', 'desativado'))
+create table equipamento (
+    id_equipamento integer primary key default nextval('seq_equipamento'),
+    tag varchar(30) not null unique,
+    nome varchar(80) not null,
+    fabricante varchar(60),
+    modelo varchar(60),
+    data_instalacao date not null,
+    status varchar(15) not null default 'operando',
+    id_linha integer not null references linha_producao (id_linha),
+    constraint ck_equipamento_status
+        check (status in ('operando', 'parado', 'manutencao', 'desativado'))
 );
 
--- ---------------------------------------------------------------------
--- Sensores e leituras
--- ---------------------------------------------------------------------
-CREATE TABLE sensor (
-    id_sensor       integer       PRIMARY KEY DEFAULT nextval('seq_sensor'),
-    tag             varchar(30)   NOT NULL UNIQUE,
-    descricao       varchar(120),
-    limite_inferior numeric(12,3) NOT NULL,
-    limite_superior numeric(12,3) NOT NULL,
-    id_equipamento  integer       NOT NULL REFERENCES equipamento (id_equipamento),
-    id_tipo_sensor  integer       NOT NULL REFERENCES tipo_sensor (id_tipo_sensor),
-    id_unidade      integer       NOT NULL REFERENCES unidade_medida (id_unidade),
-    CONSTRAINT ck_sensor_limites CHECK (limite_inferior < limite_superior)
+-- sensores e leituras
+
+create table sensor (
+    id_sensor integer primary key default nextval('seq_sensor'),
+    tag varchar(30) not null unique,
+    descricao varchar(120),
+    limite_inferior numeric(12,3) not null,
+    limite_superior numeric(12,3) not null,
+    id_equipamento integer not null references equipamento (id_equipamento),
+    id_tipo_sensor integer not null references tipo_sensor (id_tipo_sensor),
+    id_unidade integer not null references unidade_medida (id_unidade),
+    constraint ck_sensor_limites check (limite_inferior < limite_superior)
 );
 
--- Obs.: no DER de referência a leitura também guardava id_equipamento.
--- Tiramos porque o equipamento já é conhecido pelo sensor (ver
--- docs/03_modelo_logico_e_3fn.md, é uma dependência transitiva).
-CREATE TABLE leitura (
-    id_leitura bigint        PRIMARY KEY DEFAULT nextval('seq_leitura'),
-    data_hora  timestamp     NOT NULL,
-    valor      numeric(12,3) NOT NULL,
-    qualidade  varchar(10)   NOT NULL DEFAULT 'boa',
-    id_sensor  integer       NOT NULL REFERENCES sensor (id_sensor),
-    CONSTRAINT ck_leitura_qualidade CHECK (qualidade IN ('boa', 'incerta', 'ruim')),
-    -- um sensor não manda duas leituras no mesmo instante
-    CONSTRAINT uq_leitura_sensor_hora UNIQUE (id_sensor, data_hora)
+-- a leitura guarda o sensor e tambem o equipamento (como no DER do professor)
+create table leitura (
+    id_leitura bigint primary key default nextval('seq_leitura'),
+    data_hora timestamp not null,
+    valor numeric(12,3) not null,
+    qualidade varchar(10) not null default 'boa',
+    id_sensor integer not null references sensor (id_sensor),
+    id_equipamento integer not null references equipamento (id_equipamento),
+    constraint ck_leitura_qualidade check (qualidade in ('boa', 'incerta', 'ruim')),
+    -- o mesmo sensor nao pode ter duas leituras no mesmo horario
+    constraint uq_leitura_sensor_hora unique (id_sensor, data_hora)
 );
 
-CREATE TABLE alerta (
-    id_alerta  bigint       PRIMARY KEY DEFAULT nextval('seq_alerta'),
-    data_hora  timestamp    NOT NULL DEFAULT now(),
-    severidade varchar(10)  NOT NULL,
-    descricao  text         NOT NULL,
-    status     varchar(15)  NOT NULL DEFAULT 'aberto',
-    id_leitura bigint       NOT NULL REFERENCES leitura (id_leitura),
-    CONSTRAINT ck_alerta_severidade CHECK (severidade IN ('baixa', 'media', 'alta', 'critica')),
-    CONSTRAINT ck_alerta_status     CHECK (status IN ('aberto', 'reconhecido', 'resolvido'))
+create table alerta (
+    id_alerta bigint primary key default nextval('seq_alerta'),
+    data_hora timestamp not null default now(),
+    severidade varchar(10) not null,
+    descricao text not null,
+    status varchar(15) not null default 'aberto',
+    id_leitura bigint not null references leitura (id_leitura),
+    constraint ck_alerta_severidade check (severidade in ('baixa', 'media', 'alta', 'critica')),
+    constraint ck_alerta_status check (status in ('aberto', 'reconhecido', 'resolvido'))
 );
 
--- ---------------------------------------------------------------------
--- Manutenção
--- A relação entre manutenção e técnico é N:N (uma manutenção pode ter
--- mais de um técnico e um técnico faz várias manutenções), por isso
--- existe a tabela manutencao_tecnico no meio.
--- ---------------------------------------------------------------------
-CREATE TABLE manutencao (
-    id_manutencao      integer     PRIMARY KEY DEFAULT nextval('seq_manutencao'),
-    data_inicio        date        NOT NULL,
-    data_fim           date,
-    descricao          text        NOT NULL,
-    status             varchar(15) NOT NULL DEFAULT 'agendada',
-    id_equipamento     integer     NOT NULL REFERENCES equipamento (id_equipamento),
-    id_tipo_manutencao integer     NOT NULL REFERENCES tipo_manutencao (id_tipo_manutencao),
-    CONSTRAINT ck_manutencao_status
-        CHECK (status IN ('agendada', 'em_andamento', 'concluida', 'cancelada')),
-    CONSTRAINT ck_manutencao_datas
-        CHECK (data_fim IS NULL OR data_fim >= data_inicio),
-    -- manutenção concluída precisa ter data de fim
-    CONSTRAINT ck_manutencao_concluida
-        CHECK (status <> 'concluida' OR data_fim IS NOT NULL)
+-- manutencao
+
+create table manutencao (
+    id_manutencao integer primary key default nextval('seq_manutencao'),
+    data_inicio date not null,
+    data_fim date,
+    descricao text not null,
+    status varchar(15) not null default 'agendada',
+    id_equipamento integer not null references equipamento (id_equipamento),
+    id_tecnico integer not null references tecnico (id_tecnico),
+    id_tipo_manutencao integer not null references tipo_manutencao (id_tipo_manutencao),
+    constraint ck_manutencao_status
+        check (status in ('agendada', 'em_andamento', 'concluida', 'cancelada')),
+    constraint ck_manutencao_datas
+        check (data_fim is null or data_fim >= data_inicio),
+    -- se esta concluida tem que ter data de fim
+    constraint ck_manutencao_concluida
+        check (status <> 'concluida' or data_fim is not null)
 );
 
-CREATE TABLE manutencao_tecnico (
-    id_manutencao integer NOT NULL REFERENCES manutencao (id_manutencao) ON DELETE CASCADE,
-    id_tecnico    integer NOT NULL REFERENCES tecnico (id_tecnico),
-    PRIMARY KEY (id_manutencao, id_tecnico)
-);
+-- indices
+-- o postgres ja cria indice pra PK e pra UNIQUE, mas nao cria pra FK.
+-- esses sao os que eu achei que vao ser usados nas consultas.
 
--- ---------------------------------------------------------------------
--- Vínculo das sequences com as colunas
--- ---------------------------------------------------------------------
-ALTER SEQUENCE seq_planta          OWNED BY planta.id_planta;
-ALTER SEQUENCE seq_linha           OWNED BY linha_producao.id_linha;
-ALTER SEQUENCE seq_equipamento     OWNED BY equipamento.id_equipamento;
-ALTER SEQUENCE seq_tipo_sensor     OWNED BY tipo_sensor.id_tipo_sensor;
-ALTER SEQUENCE seq_unidade         OWNED BY unidade_medida.id_unidade;
-ALTER SEQUENCE seq_sensor          OWNED BY sensor.id_sensor;
-ALTER SEQUENCE seq_leitura         OWNED BY leitura.id_leitura;
-ALTER SEQUENCE seq_alerta          OWNED BY alerta.id_alerta;
-ALTER SEQUENCE seq_tecnico         OWNED BY tecnico.id_tecnico;
-ALTER SEQUENCE seq_tipo_manutencao OWNED BY tipo_manutencao.id_tipo_manutencao;
-ALTER SEQUENCE seq_manutencao      OWNED BY manutencao.id_manutencao;
+create index idx_leitura_data_hora on leitura (data_hora);
+create index idx_leitura_equipamento on leitura (id_equipamento);
+create index idx_linha_planta on linha_producao (id_planta);
+create index idx_equipamento_linha on equipamento (id_linha);
+create index idx_sensor_equipamento on sensor (id_equipamento);
+create index idx_alerta_leitura on alerta (id_leitura);
+create index idx_manutencao_equipamento on manutencao (id_equipamento);
+create index idx_manutencao_tecnico on manutencao (id_tecnico);
 
--- ---------------------------------------------------------------------
--- Índices
--- O Postgres já cria índice pra toda PK e UNIQUE. Aqui ficam os que
--- ajudam nas consultas que vamos fazer (Parte 2) e nas FKs, que o
--- Postgres NÃO indexa sozinho.
--- ---------------------------------------------------------------------
--- consultas por período (a tabela leitura é a que mais cresce)
-CREATE INDEX idx_leitura_data_hora       ON leitura (data_hora);
--- (id_sensor, data_hora) já está coberto pela UNIQUE uq_leitura_sensor_hora
-
--- chaves estrangeiras
-CREATE INDEX idx_linha_planta            ON linha_producao (id_planta);
-CREATE INDEX idx_equipamento_linha       ON equipamento (id_linha);
-CREATE INDEX idx_sensor_equipamento      ON sensor (id_equipamento);
-CREATE INDEX idx_alerta_leitura          ON alerta (id_leitura);
-CREATE INDEX idx_manutencao_equipamento  ON manutencao (id_equipamento);
-CREATE INDEX idx_manutencao_tecnico_tec  ON manutencao_tecnico (id_tecnico);
-
--- filtros frequentes: alertas ainda abertos e equipamentos por status
--- (índice parcial: só guarda as linhas que interessam, fica pequeno)
-CREATE INDEX idx_alerta_abertos          ON alerta (data_hora) WHERE status = 'aberto';
-CREATE INDEX idx_equipamento_status      ON equipamento (status);
+-- indice parcial: so os alertas abertos, que sao os mais consultados
+create index idx_alerta_abertos on alerta (data_hora) where status = 'aberto';
+create index idx_equipamento_status on equipamento (status);

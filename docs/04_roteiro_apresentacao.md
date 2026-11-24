@@ -1,22 +1,22 @@
 # Roteiro da Parte 1 e perguntas prováveis
 
-Este arquivo é para estudo do grupo antes da apresentação. Não faz parte do
-relatório.
+Arquivo de estudo do grupo, não faz parte do relatório.
 
-## Ordem sugerida para explicar a Parte 1 (uns 5 a 8 minutos)
+## Como explicar a Parte 1 (uns 5 minutos)
 
-1. **Domínio.** Indústria com duas plantas, equipamentos com sensores, leituras
-   a cada hora, alertas quando passa do limite, manutenções com técnicos.
-2. **DER.** Partimos do diagrama do professor (11 entidades). Mudamos duas
-   coisas: tiramos `id_equipamento` da leitura e criamos `manutencao_tecnico`
-   para o N:N. Saber explicar o porquê das duas é o ponto mais importante.
-3. **Modelo lógico e 3FN.** Regras de mapeamento e a dependência transitiva
-   `leitura → sensor → equipamento`.
-4. **Schema físico.** Sequences, PK/FK, CHECK, UNIQUE, índices.
-5. **Dados.** Leituras de 09 a 15/11/2026, uma por hora por sensor, mais casos
-   forçados fora do limite para gerar alertas.
+1. **O domínio.** Indústria com duas plantas, equipamentos com sensores, uma
+   leitura por hora, alerta quando passa do limite e manutenção com técnico.
+2. **O DER.** É o do professor, sem mudança: 11 entidades, todas as relações
+   1:N.
+3. **Modelo lógico.** Cada entidade vira tabela, cada 1:N vira FK no lado N.
+4. **3FN.** Tudo em 3FN, menos a `leitura.id_equipamento`, que é a exceção
+   consciente (explicada no `03_modelo_logico_e_3fn.md`). **Esse é o ponto
+   mais provável de pergunta.**
+5. **Schema.** Sequences, PK/FK, CHECK, UNIQUE, índices.
+6. **Dados.** Leituras de 09 a 15/11/2026, uma por hora por sensor, mais alguns
+   valores fora do limite pra gerar alerta.
 
-## Demonstração rápida (se pedirem pra rodar)
+## Para mostrar rodando
 
 ```bash
 createdb industrial
@@ -24,139 +24,121 @@ psql -d industrial -v ON_ERROR_STOP=1 -f sql/01_schema.sql
 psql -d industrial -v ON_ERROR_STOP=1 -f sql/02_dados.sql
 ```
 
-No final o script mostra a contagem por tabela: 2 plantas, 4 linhas,
-9 equipamentos, 16 sensores, 2.424 leituras, 12 alertas, 6 técnicos,
-9 manutenções e 14 vínculos manutenção/técnico.
+No final aparece a contagem por tabela: 2 plantas, 4 linhas, 9 equipamentos,
+16 sensores, 2.424 leituras, 12 alertas, 6 técnicos e 9 manutenções.
 
-Para mostrar que as restrições funcionam, estes comandos devem **falhar**:
+Comandos que devem **dar erro** (pra mostrar as restrições):
 
 ```sql
 -- limite inferior maior que o superior
-INSERT INTO sensor (tag, limite_inferior, limite_superior, id_equipamento, id_tipo_sensor, id_unidade)
-VALUES ('XX-1', 50, 10, 1, 1, 1);
--- ERROR: new row for relation "sensor" violates check constraint "ck_sensor_limites"
+insert into sensor (tag, limite_inferior, limite_superior, id_equipamento, id_tipo_sensor, id_unidade)
+values ('XX-1', 50, 10, 1, 1, 1);
+-- viola a check constraint "ck_sensor_limites"
 
--- duas leituras do mesmo sensor no mesmo instante
-INSERT INTO leitura (data_hora, valor, id_sensor) VALUES ('2026-11-09 00:00', 1, 1);
--- ERROR: duplicate key value violates unique constraint "uq_leitura_sensor_hora"
+-- duas leituras do mesmo sensor no mesmo horário
+insert into leitura (data_hora, valor, id_sensor, id_equipamento)
+values ('2026-11-09 00:00', 1, 1, 1);
+-- viola a unique "uq_leitura_sensor_hora"
 
--- apagar um sensor que já tem leituras
-DELETE FROM sensor WHERE tag = 'TT-101';
--- ERROR: update or delete on table "sensor" violates foreign key constraint "leitura_id_sensor_fkey" on table "leitura"
+-- apagar sensor que já tem leituras
+delete from sensor where tag = 'TT-101';
+-- viola a foreign key "leitura_id_sensor_fkey"
 
 -- status que não existe
-INSERT INTO equipamento (tag, nome, data_instalacao, status, id_linha)
-VALUES ('ZZ-1', 'teste', '2026-01-01', 'quebrado', 1);
--- ERROR: new row for relation "equipamento" violates check constraint "ck_equipamento_status"
+insert into equipamento (tag, nome, data_instalacao, status, id_linha)
+values ('ZZ-1', 'teste', '2026-01-01', 'quebrado', 1);
+-- viola a check constraint "ck_equipamento_status"
 
 -- manutenção concluída sem data de fim
-INSERT INTO manutencao (data_inicio, descricao, status, id_equipamento, id_tipo_manutencao)
-VALUES ('2026-11-01', 'x', 'concluida', 1, 1);
--- ERROR: new row for relation "manutencao" violates check constraint "ck_manutencao_concluida"
+insert into manutencao (data_inicio, descricao, status, id_equipamento, id_tecnico, id_tipo_manutencao)
+values ('2026-11-01', 'x', 'concluida', 1, 1, 1);
+-- viola a check constraint "ck_manutencao_concluida"
 ```
 
-Consulta boa para mostrar o resultado do modelo (junta quase tudo):
+Uma consulta boa pra mostrar (junta bastante coisa):
 
 ```sql
-SELECT p.nome AS planta, e.tag AS equipamento, s.tag AS sensor,
+select p.nome as planta, e.tag as equipamento, s.tag as sensor,
        l.data_hora, l.valor, u.sigla, a.severidade, a.status
-FROM alerta a
-JOIN leitura l         ON l.id_leitura = a.id_leitura
-JOIN sensor s          ON s.id_sensor = l.id_sensor
-JOIN unidade_medida u  ON u.id_unidade = s.id_unidade
-JOIN equipamento e     ON e.id_equipamento = s.id_equipamento
-JOIN linha_producao lp ON lp.id_linha = e.id_linha
-JOIN planta p          ON p.id_planta = lp.id_planta
-ORDER BY l.data_hora;
+from alerta a
+join leitura l on l.id_leitura = a.id_leitura
+join sensor s on s.id_sensor = l.id_sensor
+join unidade_medida u on u.id_unidade = s.id_unidade
+join equipamento e on e.id_equipamento = l.id_equipamento
+join linha_producao lp on lp.id_linha = e.id_linha
+join planta p on p.id_planta = lp.id_planta
+order by l.data_hora;
 ```
 
 ## Perguntas que podem aparecer
 
-**Por que sequence criada à mão e não `SERIAL`?**
-`SERIAL` cria a sequence escondida. Como o enunciado pede sequences, preferimos
-declarar cada uma (`CREATE SEQUENCE`), usar no `DEFAULT nextval(...)` e ligar
-à coluna com `OWNED BY`. O resultado é o mesmo do `SERIAL`, só que visível. A
-alternativa moderna seria `GENERATED ALWAYS AS IDENTITY`.
+**A leitura guarda o sensor e o equipamento. Isso não é redundante? Fere a 3FN?**
+Se o sensor nunca muda de equipamento, é sim, e na leitura estrita fere a 3FN.
+Mantivemos porque o DER do professor tem a coluna e porque ela registra o
+equipamento onde a leitura foi feita: se o sensor mudar de equipamento no
+futuro, as leituras antigas continuam apontando para o equipamento certo.
+Reconhecemos que existe risco de inconsistência e que um trigger resolve (na
+Parte 2).
 
-**Por que `numeric` e não `float` para o valor da leitura?**
-`float` guarda aproximação binária, então comparar `valor > limite_superior`
-pode dar errado em casos de borda (0.1 + 0.2 não é exatamente 0.3). `numeric`
-é exato. Perdemos um pouco de velocidade, mas aqui a exatidão da comparação
-com o limite é o ponto central do sistema.
+**Por que sequence criada à mão e não SERIAL?**
+O enunciado pede sequences. O `SERIAL` cria uma escondida, e aqui declaramos
+cada uma com `CREATE SEQUENCE` e usamos no `DEFAULT nextval(...)`. Funciona do
+mesmo jeito.
+
+**Por que `numeric` e não `float` no valor da leitura?**
+Porque a gente compara o valor com o limite, e o `float` guarda uma
+aproximação (0.1 + 0.2 não dá exatamente 0.3). O `numeric` é exato.
 
 **Por que `timestamp` e não `timestamptz`?**
-Todos os sensores estão no mesmo fuso (Minas Gerais), então guardar o fuso não
-traria nada. Se houvesse plantas em países diferentes, o correto seria
+Todos os sensores estão no mesmo fuso. Se tivesse planta em outro país, seria
 `timestamptz`.
 
-**Por que tirou `id_equipamento` da tabela `leitura`?**
-Porque o sensor já sabe de qual equipamento é. Guardar nos dois lugares
-quebra a 3FN (dependência transitiva) e permite inconsistência: uma leitura
-do sensor do motor apontando para a bomba. Para saber o equipamento, faz-se
-join `leitura → sensor → equipamento`.
-
-**Por que criou `manutencao_tecnico`?**
-Uma manutenção pode ter mais de um técnico, e um técnico participa de várias.
-É um N:N, e no modelo relacional N:N exige uma tabela no meio. Sem ela
-teríamos que repetir a manutenção ou criar colunas `tecnico1`, `tecnico2`.
-
-**Qual a chave primária de `manutencao_tecnico`?**
-A combinação (`id_manutencao`, `id_tecnico`). Isso impede o mesmo técnico
-duas vezes na mesma manutenção.
-
 **Por que `UNIQUE (id_sensor, data_hora)` na leitura?**
-Para um sensor não ter duas leituras no mesmo instante (envio duplicado). Ele
-também serve de índice para as consultas "leituras do sensor X no período Y".
+Pra um sensor não ter duas leituras no mesmo instante (envio duplicado). Esse
+UNIQUE também cria um índice que ajuda nas consultas por sensor e período.
 
-**O PostgreSQL já cria índice nas chaves estrangeiras?**
-Não. Ele cria índice automático para PK e UNIQUE, mas não para FK. Por isso
-criamos os índices das FKs (`idx_sensor_equipamento` etc.), que ajudam nos
-joins e no `DELETE` da tabela pai.
+**O PostgreSQL cria índice nas chaves estrangeiras?**
+Não. Cria só para PK e UNIQUE. Por isso criamos os índices das FKs.
 
 **O que é o índice parcial `idx_alerta_abertos`?**
 É um índice só das linhas com `status = 'aberto'`. Alerta aberto é a minoria e
-é o que o operador consulta toda hora, então o índice fica pequeno e rápido.
-Com poucos dados (12 alertas) o PostgreSQL ignora o índice e faz leitura
-sequencial, o que é normal: ele só compensa em tabela grande.
+é o que mais se consulta, então o índice fica pequeno. Com 12 alertas o
+PostgreSQL nem usa, faz leitura sequencial, o que é normal em tabela
+pequena.
 
-**E se a tabela `leitura` ficar gigante?**
-Um sensor mandando uma leitura por segundo gera 86 mil linhas por dia. Para
-esse caso, o caminho é particionar `leitura` por faixa de data
-(`PARTITION BY RANGE (data_hora)`) ou usar um índice BRIN em `data_hora`, que é
-bem menor que o B-tree quando os dados entram em ordem cronológica. Não
-fizemos porque o volume do trabalho não justifica.
+**E se a tabela de leituras ficar muito grande?**
+Um sensor mandando uma leitura por segundo gera 86 mil linhas por dia. Nesse
+caso o certo seria particionar por data (`PARTITION BY RANGE (data_hora)`) ou
+usar índice BRIN em `data_hora`. Não fizemos porque o volume do trabalho não
+justifica.
 
-**Por que `CHECK` e não `ENUM` ou tabela de status?**
-Os valores são poucos e fixos. `ENUM` é difícil de alterar depois (não dá
-para remover valor) e uma tabela de domínio para cada lista seria burocracia.
-Com `CHECK` basta um `ALTER TABLE` para mudar a lista.
+**Por que `CHECK` e não `ENUM` ou uma tabela de status?**
+Os valores são poucos e fixos. Com `CHECK`, mudar a lista é só um `ALTER TABLE`.
+No `ENUM` não dá pra remover valor depois.
 
 **O que acontece se apagar um equipamento?**
-O banco recusa se ele ainda tiver sensores ou manutenções (FK padrão, sem
-`CASCADE`). Quisemos proteger o histórico. A única FK com `ON DELETE CASCADE`
-é a de `manutencao_tecnico.id_manutencao`: apagar uma manutenção apaga os
-vínculos dela.
+O banco não deixa se ele ainda tiver sensores, leituras ou manutenções. As
+FKs são as padrão, sem `CASCADE`, pra proteger o histórico.
 
-**O modelo está em BCNF?**
-Sim: nas tabelas com mais de uma chave candidata (`sensor`, `equipamento`,
-`leitura`), todo determinante é chave candidata.
-
-**Tem alguma dependência que fique na dúvida na 3FN?**
-`equipamento.modelo → fabricante` seria transitiva se cada modelo pertencesse
-a um fabricante só. Consideramos os dois como descrição do equipamento. Se
-fosse necessário, dá para separar em uma tabela `modelo_equipamento`.
+**Cadê o N:N que o enunciado fala?**
+No DER do professor todas as relações são 1:N, e o enunciado só pede a
+"possibilidade" de N:N. O caso natural é técnico e manutenção, se uma
+manutenção precisar de mais de um técnico: aí entra a tabela
+`manutencao_tecnico`.
 
 **Onde ficam os alertas automáticos?**
-Na Parte 2: um trigger na tabela `leitura` que compara o valor com os limites
-do sensor e insere em `alerta`. Os 12 alertas que já estão nos dados de
-exemplo foram gerados por um `INSERT ... SELECT` que aplica a mesma regra nas
-leituras forçadas fora do limite, como ponto de partida.
+Na Parte 2, num trigger na tabela `leitura` que compara o valor com os limites
+do sensor e insere em `alerta`. Os 12 alertas dos dados de exemplo foram
+gerados por um `INSERT ... SELECT` com a mesma regra.
 
-**Como a severidade dos alertas foi decidida nos dados de exemplo?**
-Pelo quanto o valor passou do limite, em relação à largura da faixa do sensor:
-mais de 25% é crítica, mais de 10% é alta, mais de 3% é média e o resto é
-baixa. A Parte 2 pode usar a mesma regra no trigger para ficar coerente.
+**Como foi decidida a severidade nos dados de exemplo?**
+Pelo quanto o valor passou do limite, comparado com a largura da faixa do
+sensor: mais de 25% é crítica, mais de 10% é alta, mais de 3% é média, o resto
+é baixa.
 
 **Por que os dados têm `setseed`?**
-Para o ruído aleatório das leituras ser sempre o mesmo. Assim os três do grupo
-(e o professor) rodam o script e chegam nos mesmos números.
+Pra o aleatório ser sempre o mesmo. Assim todo mundo roda e chega nos mesmos
+números.
+
+**Por que o SQL está sem acento?**
+Pra não dar problema de codificação no `psql` do Windows.
