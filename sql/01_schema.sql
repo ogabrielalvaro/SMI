@@ -7,18 +7,22 @@
 --
 -- pode rodar de novo, ele apaga tudo antes de criar.
 -- o modelo segue o DER do professor.
+-- ####################################################################
+-- # Basic CREATE DATABASE statement
+-- # See https://www.ibm.com/docs/en/db2-for-zos/13?topic=statements-create-database for complete syntax.
+-- ####################################################################
 
-drop table if exists alerta cascade;
-drop table if exists leitura cascade;
-drop table if exists manutencao cascade;
-drop table if exists sensor cascade;
-drop table if exists equipamento cascade;
-drop table if exists linha_producao cascade;
-drop table if exists planta cascade;
-drop table if exists tecnico cascade;
+drop table if exists alerta             cascade;
+drop table if exists leitura             cascade;
+drop table if exists manutencao          cascade;
+drop table if exists sensor               cascade;
+drop table if exists equipamento      cascade;
+drop table if exists linha_producao  cascade;
+drop table if exists planta            cascade;
+drop table if exists tecnico          cascade;
 drop table if exists tipo_manutencao cascade;
-drop table if exists unidade_medida cascade;
-drop table if exists tipo_sensor cascade;
+drop table if exists unidade_medida  cascade;
+drop table if exists tipo_sensor     cascade;
 
 drop sequence if exists seq_planta, seq_linha, seq_equipamento, seq_tipo_sensor,
     seq_unidade, seq_sensor, seq_leitura, seq_alerta, seq_tecnico,
@@ -92,7 +96,7 @@ create table equipamento (
     status varchar(15) not null default 'operando',
     id_linha integer not null references linha_producao (id_linha),
     constraint ck_equipamento_status
-        check (status in ('operando', 'parado', 'manutencao', 'desativado'))
+        check (status in ('operando', 'envio', 'manutencao'))
 );
 
 -- sensores e leituras
@@ -114,10 +118,10 @@ create table leitura (
     id_leitura bigint primary key default nextval('seq_leitura'),
     data_hora timestamp not null,
     valor numeric(12,3) not null,
-    qualidade varchar(10) not null default 'boa',
+    qualidade varchar(10) not null default 'estavel',
     id_sensor integer not null references sensor (id_sensor),
     id_equipamento integer not null references equipamento (id_equipamento),
-    constraint ck_leitura_qualidade check (qualidade in ('boa', 'incerta', 'ruim')),
+    constraint ck_leitura_qualidade check (qualidade in ('estavel', 'instavel')),
     -- o mesmo sensor nao pode ter duas leituras no mesmo horario
     constraint uq_leitura_sensor_hora unique (id_sensor, data_hora)
 );
@@ -127,10 +131,10 @@ create table alerta (
     data_hora timestamp not null default now(),
     severidade varchar(10) not null,
     descricao text not null,
-    status varchar(15) not null default 'aberto',
+    status varchar(15) not null default 'ok',
     id_leitura bigint not null references leitura (id_leitura),
-    constraint ck_alerta_severidade check (severidade in ('baixa', 'media', 'alta', 'critica')),
-    constraint ck_alerta_status check (status in ('aberto', 'reconhecido', 'resolvido'))
+    constraint ck_alerta_severidade check (severidade in ('baixa', 'media', 'alta', 'critica', 'nula')),
+    constraint ck_alerta_status check (status in ('alerta', 'ok'))
 );
 
 -- manutencao
@@ -169,3 +173,5 @@ create index idx_manutencao_tecnico on manutencao (id_tecnico);
 -- indice parcial: so os alertas abertos, que sao os mais consultados
 create index idx_alerta_abertos on alerta (data_hora) where status = 'aberto';
 create index idx_equipamento_status on equipamento (status);
+
+
