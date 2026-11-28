@@ -57,37 +57,31 @@ for each row execute function fn_check_status_equip();
 
 
 --tabela de MANUTENCAO
--- funcao que calcula a media de duracao (em dias) das manutencoes de um equipamento
--- so conta as 'concluida' (as outras ainda nao tem duracao real) que COMECARAM no periodo
--- retorna INTEGER (dias, arredondado). sem manutencao concluida no periodo retorna NULL
--- obs: data - data no postgres ja da numero inteiro de dias
---   ex: SELECT fn_media_manut_equip(1, '2026-01-01', '2026-12-01');
-CREATE OR REPLACE FUNCTION fn_media_manut_equip(
-    p_id_equipamento INTEGER, p_inicio DATE, p_fim DATE)
+-- funcao que calcula a media de duracao dedia das manutencoes de um equipamento
+-- so conta as  com status concluida
+CREATE OR REPLACE FUNCTION fn_media_manut_equip(p_id_equipamento INTEGER, inicio_procura DATE, fim_procura DATE)
 RETURNS INTEGER
 AS $$
 DECLARE
-    v_media NUMERIC;
+    media NUMERIC;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM equipamento WHERE id_equipamento = p_id_equipamento) THEN
-        RAISE EXCEPTION 'operacao invalida: equipamento % nao existe', p_id_equipamento;
+        RAISE EXCEPTION 'operacao invalida: equipamento nao existe';
     END IF;
 
-    IF p_inicio >= p_fim THEN
+    IF inicio_procura >= fim_procura THEN
         RAISE EXCEPTION 'operacao invalida: inicio do periodo deve ser antes do fim';
     END IF;
 
-    SELECT AVG(data_fim - data_inicio) INTO v_media FROM manutencao
-    WHERE id_equipamento = p_id_equipamento
-    AND status = 'concluida'
-    AND data_inicio >= p_inicio AND data_inicio < p_fim;
+    SELECT AVG(data_fim - data_inicio) INTO media FROM manutencao WHERE id_equipamento = p_id_equipamento
+    AND status = 'concluida' AND data_inicio >= inicio_procura AND data_inicio < fim_procura;
 
-    IF v_media IS NULL THEN
-        RAISE NOTICE 'equipamento % sem manutencao concluida no periodo', p_id_equipamento;
+    IF media IS NULL THEN
+        RAISE NOTICE 'equipamento com zero manutencoes concluidas no periodo';
         RETURN NULL;
     END IF;
 
-    RETURN v_media;
+    RETURN media;
 END;
 $$ LANGUAGE plpgsql;
 -- realizada    -> data_inicio < data_fim <= hoje
@@ -143,38 +137,32 @@ for each row execute function fn_check_data_manut();
 
 -- MDOULO DA TABELA DE LEITURA
 -- funcao que calcula a media das leituras de um equipamento num periodo
--- retorna INTEGER (media arredondada). se nao teve leitura no periodo retorna NULL
--- p_id_sensor e opcional: um equipamento tem sensores de grandezas diferentes
--- (temperatura, pressao...) e misturar tudo numa media so nao quer dizer nada.
--- sem sensor = media de todos; com sensor = media so dele.
---   ex: SELECT fn_media_leitura_equip(1, '2026-11-01', '2026-11-28');
---   ex: SELECT fn_media_leitura_equip(1, '2026-11-01', '2026-11-28', 3);
-CREATE OR REPLACE FUNCTION fn_media_leitura_equip(
-    p_id_equipamento INTEGER, p_inicio TIMESTAMP, p_fim TIMESTAMP, p_id_sensor INTEGER DEFAULT NULL)
-RETURNS INTEGER
+-- retorna a media. se nao teve leitura no periodo retorna NULL
+-- sem sensor faz a media de todos, mesmo que seja um pouco incondizente com as variaveis de unidade
+-- com sensor é media so dele
+
+CREATE OR REPLACE FUNCTION fn_media_leitura_equip( p_id_equipamento INTEGER, inicio_procura TIMESTAMP, fim_procura TIMESTAMP, p_id_sensor INTEGER DEFAULT NULL) RETURNS INTEGER
 AS $$
 DECLARE
-    v_media NUMERIC;
+    media NUMERIC;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM equipamento WHERE id_equipamento = p_id_equipamento) THEN
-        RAISE EXCEPTION 'operacao invalida: equipamento % nao existe', p_id_equipamento;
+        RAISE EXCEPTION 'operacao invalida: equipamento nao existe';
     END IF;
 
-    IF p_inicio >= p_fim THEN
+    IF inicio_procura >= fim_procura THEN
         RAISE EXCEPTION 'operacao invalida: inicio do periodo deve ser antes do fim';
     END IF;
 
-    SELECT AVG(valor) INTO v_media FROM leitura
-    WHERE id_equipamento = p_id_equipamento
-    AND data_hora >= p_inicio AND data_hora < p_fim
-    AND (p_id_sensor IS NULL OR id_sensor = p_id_sensor);
+    SELECT AVG(valor) INTO media FROM leitura WHERE id_equipamento = p_id_equipamento
+    AND data_hora >= inicio_procura AND data_hora <fim_procura AND (p_id_sensor IS NULL OR id_sensor = p_id_sensor);
 
-    IF v_media IS NULL THEN
-        RAISE NOTICE 'equipamento % sem leituras no periodo', p_id_equipamento;
+    IF media IS NULL THEN
+        RAISE NOTICE 'equipamento com zero leituras no periodo';
         RETURN NULL;
     END IF;
 
-    RETURN v_media;
+    RETURN media;
 END;
 $$ LANGUAGE plpgsql;
 
